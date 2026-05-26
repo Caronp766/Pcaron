@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CT Trail Guide</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --forest:#1E3A16; --moss:#3D5C33; --sage:#6B9460; --light-sage:#A8C49E;
+      --bark:#5C3D1E; --earth:#8C6240; --tan:#C4A882;
+      --cream:#F7F3EC; --parchment:#EEE5D2; --warm-white:#FDFAF5;
+      --stone:#8A7D6E; --border:#DDD0BC;
+      --easy:#2E6B25; --medium:#9B6020; --hard:#7A2020;
+      --nav-h:68px; --radius:12px;
+      --shadow-sm:0 1px 4px rgba(0,0,0,0.08);
+      --shadow-md:0 4px 16px rgba(0,0,0,0.12);
+      --shadow-lg:0 12px 40px rgba(0,0,0,0.18);
+    }
+    html { scroll-behavior:smooth; }
+    body { font-family:'Inter',sans-serif; background:var(--cream); color:var(--forest); min-height:100vh; }
+
+    /* NAV */
+    nav {
+      position:fixed; top:0; left:0; right:0; z-index:1000;
+      height:var(--nav-h); background:var(--forest);
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 2.5rem; box-shadow:0 2px 20px rgba(0,0,0,0.3);
+    }
+    .nav-logo {
+      font-family:'Playfair Display',serif; font-size:1.35rem; font-weight:700;
+      color:var(--cream); display:flex; align-items:center; gap:10px;
+    }
+    .nav-logo-icon {
+      width:34px; height:34px; background:var(--moss); border-radius:8px;
+      display:flex; align-items:center; justify-content:center; font-size:18px;
+    }
+    .nav-links { display:flex; gap:4px; }
+    .nav-btn {
+      background:none; border:none; cursor:pointer;
+      font-family:'Inter',sans-serif; font-size:0.8rem; font-weight:600;
+      letter-spacing:0.1em; text-transform:uppercase; color:var(--light-sage);
+      padding:9px 18px; border-radius:8px; transition:all 0.2s;
+    }
+    .nav-btn:hover { background:rgba(255,255,255,0.08); color:#fff; }
+    .nav-btn.active { background:var(--sage); color:#fff; }
+
+    /* PAGES */
+    .page { display:none; padding-top:var(--nav-h); min-height:100vh; }
+    .page.active { display:block; }
+
+    /* HERO */
+    .hero {
+      background:var(--forest); padding:3.5rem 2.5rem 2.5rem;
+      position:relative; overflow:hidden;
+    }
+    .hero-accent {
+      position:absolute; right:-60px; top:-60px;
+      width:320px; height:320px;
+      background:radial-gradient(circle, var(--sage) 0%, transparent 70%);
+      opacity:0.12; border-radius:50%;
+    }
+    .hero-accent2 {
+      position:absolute; left:40%; bottom:-80px;
+      width:200px; height:200px;
+      background:radial-gradient(circle, var(--moss) 0%, transparent 70%);
+      opacity:0.2; border-radius:50%;
+    }
+    .hero-content { position:relative; }
+    .hero-eyebrow {
+      font-size:0.7rem; font-weight:600; letter-spacing:0.2em; text-transform:uppercase;
+      color:var(--light-sage); margin-bottom:0.75rem;
+    }
+    .hero-title {
+      font-family:'Playfair Display',serif;
+      font-size:clamp(2.2rem,5vw,3.8rem); color:#fff; line-height:1.05; margin-bottom:0.75rem;
+    }
+    .hero-title em { font-style:normal; color:var(--light-sage); }
+    .hero-sub { color:var(--parchment); font-size:1rem; font-weight:300; opacity:0.85; max-width:500px; }
+    .hero-stats { display:flex; gap:2.5rem; margin-top:2rem; }
+    .hero-stat-num {
+      font-family:'Playfair Display',serif; font-size:2rem; font-weight:700;
+      color:var(--light-sage); line-height:1;
+    }
+    .hero-stat-label {
+      font-size:0.68rem; font-weight:600; letter-spacing:0.1em; text-transform:uppercase;
+      color:var(--parchment); opacity:0.65; margin-top:3px;
+    }
+
+    /* FILTER BAR */
+    .filter-bar {
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+      padding:0.875rem 2.5rem; background:var(--warm-white);
+      border-bottom:1px solid var(--border); box-shadow:var(--shadow-sm);
+    }
+    .filter-bar input, .filter-bar select {
+      font-family:'Inter',sans-serif; font-size:13px; font-weight:500;
+      padding:9px 14px; border:1.5px solid var(--border); border-radius:8px;
+      background:#fff; color:var(--forest); outline:none;
+      transition:border-color 0.2s, box-shadow 0.2s;
+    }
+    .filter-bar input:focus, .filter-bar select:focus {
+      border-color:var(--sage); box-shadow:0 0 0 3px rgba(107,148,96,0.15);
+    }
+    .filter-bar input { flex:1; min-width:200px; }
+    .filter-count { margin-left:auto; font-size:12px; font-weight:500; color:var(--stone); white-space:nowrap; }
+
+    /* MAP */
+    #map { height:calc(100vh - var(--nav-h) - 210px); min-height:400px; }
+    .map-legend {
+      display:flex; gap:14px; align-items:center; padding:0.5rem 2.5rem;
+      background:var(--warm-white); border-bottom:1px solid var(--border);
+      font-size:12px; font-weight:500;
+    }
+    .legend-label { color:var(--stone); font-size:11px; text-transform:uppercase; letter-spacing:0.1em; }
+    .legend-item { display:flex; align-items:center; gap:5px; color:var(--forest); }
+    .legend-dot { width:10px; height:10px; border-radius:50%; }
+
+    /* TRAIL PANEL */
+    #trail-panel {
+      display:none; position:fixed; right:0; top:var(--nav-h); bottom:0;
+      width:360px; z-index:600; background:var(--warm-white);
+      border-left:1px solid var(--border); overflow-y:auto;
+      box-shadow:-8px 0 32px rgba(0,0,0,0.14);
+      animation:slideIn 0.28s cubic-bezier(0.16,1,0.3,1);
+    }
+    @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+    .panel-header {
+      background:linear-gradient(160deg,var(--forest),var(--moss));
+      padding:1.5rem 1.5rem 1.25rem; position:relative;
+    }
+    .panel-close {
+      position:absolute; top:14px; right:14px;
+      background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2);
+      cursor:pointer; color:#fff; width:30px; height:30px; border-radius:50%;
+      font-size:16px; display:flex; align-items:center; justify-content:center; transition:background 0.2s;
+    }
+    .panel-close:hover { background:rgba(255,255,255,0.25); }
+    .panel-name {
+      font-family:'Playfair Display',serif; font-size:1.35rem; color:#fff;
+      line-height:1.2; padding-right:2.5rem; margin-bottom:4px;
+    }
+    .panel-location { font-size:12px; color:var(--light-sage); font-weight:500; }
+    .panel-body { padding:1.25rem; }
+
+    .diff-badge {
+      display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:700;
+      letter-spacing:0.12em; text-transform:uppercase;
+      padding:4px 12px; border-radius:99px; margin-bottom:14px;
+    }
+    .diff-Easy   { background:#E3F2DF; color:var(--easy);   border:1px solid #B8DEB2; }
+    .diff-Medium { background:#FDF0E0; color:var(--medium); border:1px solid #E8C98A; }
+    .diff-Hard   { background:#FCEBEB; color:var(--hard);   border:1px solid #E8AAAA; }
+
+    .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    .info-cell {
+      background:var(--cream); border:1px solid var(--border); border-radius:10px; padding:10px 12px;
+    }
+    .info-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.14em; color:var(--stone); margin-bottom:3px; }
+    .info-val { font-size:13px; font-weight:600; color:var(--forest); }
+
+    .panel-desc {
+      font-size:13px; line-height:1.75; color:var(--bark); margin-bottom:16px;
+      padding:12px 14px; background:var(--parchment); border-radius:10px;
+      border-left:3px solid var(--sage);
+    }
+    .tag-row { display:flex; gap:6px; flex-wrap:wrap; }
+    .tag { font-size:11px; font-weight:500; padding:5px 11px; border-radius:7px; background:var(--cream); color:var(--stone); border:1px solid var(--border); }
+
+    /* PAGE HEADER */
+    .page-header {
+      background:linear-gradient(160deg,var(--forest),var(--moss));
+      padding:2.75rem 2.5rem 2.25rem; position:relative; overflow:hidden;
+    }
+    .page-header::after {
+      content:''; position:absolute; right:-40px; bottom:-40px;
+      width:200px; height:200px;
+      background:radial-gradient(circle,var(--sage),transparent 70%);
+      opacity:0.12; border-radius:50%;
+    }
+    .page-title { font-family:'Playfair Display',serif; font-size:clamp(1.8rem,4vw,2.6rem); color:#fff; position:relative; }
+    .page-subtitle { color:var(--light-sage); opacity:0.9; margin-top:6px; font-size:0.95rem; font-weight:300; position:relative; }
+
+    /* TRAILS GRID */
+    .trails-grid {
+      display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
+      gap:1.25rem; padding:1.75rem 2.5rem; max-width:1300px;
+    }
+    .trail-card {
+      background:#fff; border-radius:var(--radius); border:1px solid var(--border);
+      overflow:hidden; cursor:pointer;
+      transition:transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.22s;
+    }
+    .trail-card:hover { transform:translateY(-5px); box-shadow:var(--shadow-lg); }
+    .card-ribbon { height:4px; }
+    .card-ribbon.Easy   { background:linear-gradient(90deg,var(--easy),var(--sage)); }
+    .card-ribbon.Medium { background:linear-gradient(90deg,var(--medium),var(--tan)); }
+    .card-ribbon.Hard   { background:linear-gradient(90deg,var(--hard),var(--earth)); }
+    .card-body { padding:1.25rem; }
+    .card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px; }
+    .card-name { font-family:'Playfair Display',serif; font-size:1.05rem; color:var(--forest); line-height:1.25; flex:1; padding-right:8px; }
+    .card-diff-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:4px; }
+    .card-loc { font-size:11px; color:var(--stone); font-weight:500; margin-bottom:10px; }
+    .card-stats {
+      display:flex; margin-bottom:12px; background:var(--cream);
+      border-radius:8px; border:1px solid var(--border); overflow:hidden;
+    }
+    .card-stat { flex:1; text-align:center; padding:7px 4px; border-right:1px solid var(--border); }
+    .card-stat:last-child { border-right:none; }
+    .card-stat-val { font-size:12px; font-weight:700; color:var(--forest); }
+    .card-stat-key { font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:var(--stone); margin-top:1px; }
+    .card-desc { font-size:12px; color:var(--stone); line-height:1.6; margin-bottom:12px; }
+    .card-tags { display:flex; gap:5px; flex-wrap:wrap; }
+    .card-tag { font-size:10px; font-weight:500; padding:3px 8px; border-radius:5px; background:var(--parchment); color:var(--stone); border:1px solid var(--border); }
+
+    /* MODAL */
+    .modal-overlay {
+      display:none; position:fixed; inset:0; z-index:900;
+      background:rgba(10,20,8,0.6); backdrop-filter:blur(6px);
+      align-items:center; justify-content:center; padding:1rem;
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--warm-white); border-radius:18px;
+      width:100%; max-width:560px; max-height:88vh; overflow-y:auto;
+      box-shadow:var(--shadow-lg);
+      animation:popIn 0.22s cubic-bezier(0.16,1,0.3,1);
+    }
+    @keyframes popIn { from{transform:scale(0.94);opacity:0} to{transform:scale(1);opacity:1} }
+    .modal-header {
+      background:linear-gradient(160deg,var(--forest),var(--moss));
+      padding:1.75rem 1.5rem 1.5rem; position:relative; border-radius:18px 18px 0 0;
+    }
+    .modal-close {
+      position:absolute; top:14px; right:14px;
+      background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2);
+      cursor:pointer; color:#fff; width:32px; height:32px; border-radius:50%;
+      font-size:18px; display:flex; align-items:center; justify-content:center; transition:background 0.2s;
+    }
+    .modal-close:hover { background:rgba(255,255,255,0.25); }
+    .modal-title { font-family:'Playfair Display',serif; font-size:1.5rem; color:#fff; padding-right:3rem; }
+    .modal-loc { font-size:12px; color:var(--light-sage); margin-top:5px; font-weight:500; }
+    .modal-body { padding:1.5rem; }
+    .modal-divider { margin:1rem 0; border:none; border-top:1px solid var(--border); }
+    .modal-section-label { font-size:10px; font-weight:700; letter-spacing:0.15em; text-transform:uppercase; color:var(--stone); margin-bottom:6px; }
+
+    /* REVIEWS */
+    .reviews-layout { display:grid; grid-template-columns:1fr 400px; }
+    @media (max-width:820px) { .reviews-layout { grid-template-columns:1fr; } }
+    .reviews-list { padding:1.75rem 2.5rem; }
+    .section-title {
+      font-family:'Playfair Display',serif; font-size:1.5rem; color:var(--forest);
+      margin-bottom:1.25rem; display:flex; align-items:center; gap:10px;
+    }
+    .section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+    .review-card {
+      background:#fff; border-radius:var(--radius); border:1px solid var(--border);
+      padding:1.1rem 1.25rem; margin-bottom:1rem; transition:box-shadow 0.2s;
+    }
+    .review-card:hover { box-shadow:var(--shadow-md); }
+    .review-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; }
+    .review-trail { font-size:14px; font-weight:700; color:var(--forest); }
+    .review-author { font-size:12px; color:var(--stone); font-weight:500; }
+    .stars { color:#C9922A; font-size:15px; margin-bottom:6px; letter-spacing:1px; }
+    .review-text { font-size:13px; color:var(--bark); line-height:1.7; }
+    .no-reviews { color:var(--stone); font-size:14px; padding:2.5rem 0; text-align:center; font-style:italic; }
+
+    /* FORM */
+    .review-form-wrap {
+      background:var(--parchment); border-left:1px solid var(--border); padding:1.75rem;
+      min-height:calc(100vh - var(--nav-h) - 170px);
+    }
+    .form-group { margin-bottom:1.1rem; }
+    .form-label { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; color:var(--stone); margin-bottom:6px; }
+    .form-input, .form-select, .form-textarea {
+      width:100%; font-family:'Inter',sans-serif; font-size:14px;
+      padding:10px 14px; border:1.5px solid var(--border); border-radius:9px;
+      background:#fff; color:var(--forest); outline:none;
+      transition:border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      border-color:var(--sage); box-shadow:0 0 0 3px rgba(107,148,96,0.15);
+    }
+    .form-textarea { resize:vertical; min-height:110px; line-height:1.6; }
+    .star-select { display:flex; gap:4px; margin-top:4px; }
+    .star-btn { background:none; border:none; cursor:pointer; font-size:28px; color:#D5C8B8; transition:color 0.15s,transform 0.1s; line-height:1; }
+    .star-btn:hover { transform:scale(1.15); }
+    .star-btn.selected { color:#C9922A; }
+    .submit-btn {
+      width:100%; padding:13px; background:var(--forest); color:#fff;
+      border:none; border-radius:9px; cursor:pointer;
+      font-family:'Inter',sans-serif; font-size:13px; font-weight:700;
+      letter-spacing:0.1em; text-transform:uppercase;
+      transition:background 0.2s,transform 0.15s,box-shadow 0.2s; margin-top:6px;
+    }
+    .submit-btn:hover { background:var(--moss); transform:translateY(-1px); box-shadow:0 4px 14px rgba(30,58,22,0.35); }
+    .submit-btn:active { transform:translateY(0); }
+    .success-msg {
+      display:none; background:#E3F2DF; border:1px solid #B8DEB2; color:var(--easy);
+      border-radius:9px; padding:12px 16px; font-size:13px; margin-bottom:1rem; font-weight:600;
+    }
+
+    footer {
+      background:var(--forest); color:var(--light-sage);
+      text-align:center; padding:1.5rem; font-size:12px; font-weight:500; letter-spacing:0.05em;
+    }
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-track { background:var(--parchment); }
+    ::-webkit-scrollbar-thumb { background:var(--sage); border-radius:3px; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">
+    <div class="nav-logo-icon" style="font-size:16px;font-weight:700;color:var(--light-sage)">CT</div>
+    CT Trail Guide
+  </div>
+  <div class="nav-links">
+    <button class="nav-btn active" onclick="showPage('map',this)">Map</button>
+    <button class="nav-btn" onclick="showPage('trails',this)">Trails</button>
+    <button class="nav-btn" onclick="showPage('reviews',this)">Reviews</button>
+  </div>
+</nav>
+
+<!-- MAP PAGE -->
+<div class="page active" id="page-map">
+  <div class="hero">
+    <div class="hero-accent"></div><div class="hero-accent2"></div>
+    <div class="hero-content">
+      <div class="hero-eyebrow">Connecticut Trail Guide</div>
+      <div class="hero-title">Explore Local Trails</div>
+      <div class="hero-sub">Find your next hike. Click any pin to see trail details.</div>
+      <div class="hero-stats">
+        <div class="hero-stat"><div class="hero-stat-num" id="stat-trails">5</div><div class="hero-stat-label">Trails</div></div>
+        <div class="hero-stat"><div class="hero-stat-num">3</div><div class="hero-stat-label">Difficulty Levels</div></div>
+        <div class="hero-stat"><div class="hero-stat-num">CT</div><div class="hero-stat-label">Location</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="filter-bar">
+    <input type="text" id="map-search" placeholder="Search trails by name..." oninput="filterMap()" />
+    <select id="map-diff" onchange="filterMap()">
+      <option value="all">All difficulties</option>
+      <option value="Easy">Easy</option>
+      <option value="Medium">Medium</option>
+      <option value="Hard">Hard</option>
+    </select>
+    <div class="filter-count" id="trail-count"></div>
+  </div>
+  <div class="map-legend">
+    <span class="legend-label">Difficulty:</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#2E6B25"></span>Easy</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#9B6020"></span>Medium</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#7A2020"></span>Hard</span>
+  </div>
+  <div id="map"></div>
+  <div id="trail-panel">
+    <div class="panel-header">
+      <button class="panel-close" onclick="closePanel()">×</button>
+      <div class="panel-name" id="p-name"></div>
+      <div class="panel-location" id="p-loc"></div>
+    </div>
+    <div class="panel-body">
+      <div id="p-badge"></div>
+      <div class="info-grid">
+        <div class="info-cell"><div class="info-label">Distance</div><div class="info-val" id="p-dist"></div></div>
+        <div class="info-cell"><div class="info-label">Est. Time</div><div class="info-val" id="p-time"></div></div>
+        <div class="info-cell"><div class="info-label">Terrain</div><div class="info-val" id="p-terrain"></div></div>
+        <div class="info-cell"><div class="info-label">Best Season</div><div class="info-val" id="p-season"></div></div>
+      </div>
+      <p class="panel-desc" id="p-desc"></p>
+      <div class="tag-row" id="p-tags"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TRAILS PAGE -->
+<div class="page" id="page-trails">
+  <div class="page-header">
+    <div class="page-title">All Trails</div>
+    <div class="page-subtitle">Browse every hike in the guide</div>
+  </div>
+  <div class="filter-bar">
+    <input type="text" id="list-search" placeholder="Search trails..." oninput="filterList()" />
+    <select id="list-diff" onchange="filterList()">
+      <option value="all">All difficulties</option>
+      <option value="Easy">Easy</option>
+      <option value="Medium">Medium</option>
+      <option value="Hard">Hard</option>
+    </select>
+    <select id="list-sort" onchange="filterList()">
+      <option value="name">Sort: A-Z</option>
+      <option value="dist-asc">Sort: Shortest first</option>
+      <option value="dist-desc">Sort: Longest first</option>
+    </select>
+  </div>
+  <div class="trails-grid" id="trails-grid"></div>
+</div>
+
+<!-- TRAIL MODAL -->
+<div class="modal-overlay" id="trail-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <button class="modal-close" onclick="document.getElementById('trail-modal').classList.remove('open')">×</button>
+      <div class="modal-title" id="m-name"></div>
+      <div class="modal-loc" id="m-loc"></div>
+    </div>
+    <div class="modal-body">
+      <div id="m-badge" style="margin-bottom:14px"></div>
+      <div class="info-grid" style="margin-bottom:16px">
+        <div class="info-cell"><div class="info-label">Distance</div><div class="info-val" id="m-dist"></div></div>
+        <div class="info-cell"><div class="info-label">Est. Time</div><div class="info-val" id="m-time"></div></div>
+        <div class="info-cell"><div class="info-label">Terrain</div><div class="info-val" id="m-terrain"></div></div>
+        <div class="info-cell"><div class="info-label">Entrance Fee</div><div class="info-val" id="m-fee"></div></div>
+      </div>
+      <p class="panel-desc" id="m-desc" style="margin-bottom:14px"></p>
+      <div class="tag-row" id="m-tags"></div>
+      <hr class="modal-divider" />
+      <div class="modal-section-label">Address</div>
+      <div style="font-size:13px;color:var(--bark);font-weight:500" id="m-addr"></div>
+    </div>
+  </div>
+</div>
+
+<!-- REVIEWS PAGE -->
+<div class="page" id="page-reviews">
+  <div class="page-header">
+    <div class="page-title">Trail Reviews</div>
+    <div class="page-subtitle">Real experiences from the community</div>
+  </div>
+  <div class="reviews-layout">
+    <div class="reviews-list">
+      <div class="section-title">Community Reviews</div>
+      <div id="reviews-container"></div>
+    </div>
+    <div class="review-form-wrap">
+      <div class="section-title" style="font-size:1.2rem">Leave a Review</div>
+      <div class="success-msg" id="success-msg">✅ Review submitted , thanks for contributing!</div>
+      <div class="form-group">
+        <label class="form-label">Your Name</label>
+        <input type="text" class="form-input" id="r-name" placeholder="e.g. Alex K." />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Trail</label>
+        <select class="form-select" id="r-trail"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rating</label>
+        <div class="star-select">
+          <button class="star-btn" data-val="1" onclick="setRating(1)">★</button>
+          <button class="star-btn" data-val="2" onclick="setRating(2)">★</button>
+          <button class="star-btn" data-val="3" onclick="setRating(3)">★</button>
+          <button class="star-btn" data-val="4" onclick="setRating(4)">★</button>
+          <button class="star-btn" data-val="5" onclick="setRating(5)">★</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Your Review</label>
+        <textarea class="form-textarea" id="r-text" placeholder="What was the trail like? Any tips for other hikers?"></textarea>
+      </div>
+      <button class="submit-btn" onclick="submitReview()">Submit Review</button>
+    </div>
+  </div>
+</div>
+
+<footer>© 2025 CT Trail Guide &nbsp;·&nbsp; Exploring Connecticut one trail at a time</footer>
+
+<script>
+const trails = [
+  { name:"Tarrywile Park", location:"Danbury, CT", difficulty:"Easy", distance:2.5, time:"1-2 hrs", terrain:"Forest / Meadow", dog:true, kids:true, parking:true, fee:"Free", season:"Year Round", description:"A peaceful loop through forests and meadows with a historic mansion on site. Great for all skill levels.", address:"70 Southern Blvd, Danbury, CT", lat:41.3712, lng:-73.4337 },
+  { name:"Squantz Pond State Park", location:"New Fairfield, CT", difficulty:"Medium", distance:4.2, time:"2-3 hrs", terrain:"Lakeside / Forest", dog:true, kids:true, parking:true, fee:"Seasonal Fee", season:"Spring / Summer / Fall", description:"Beautiful trail along the pond with stunning lake views and great swimming spots in summer.", address:"178 Shortwoods Rd, New Fairfield, CT", lat:41.5387, lng:-73.4801 },
+  { name:"Sleeping Giant State Park", location:"Hamden, CT", difficulty:"Hard", distance:8.6, time:"4-5 hrs", terrain:"Ridge / Rocky", dog:true, kids:false, parking:true, fee:"Free", season:"Spring / Fall", description:"A challenging ridge hike with some of the best panoramic views in Connecticut. Bring plenty of water.", address:"200 Mt Carmel Ave, Hamden, CT", lat:41.4198, lng:-72.9007 },
+  { name:"Great Hollow Lake Trail", location:"New Milford, CT", difficulty:"Easy", distance:3.1, time:"1.5-2 hrs", terrain:"Lakeside / Forest", dog:true, kids:true, parking:true, fee:"Free", season:"Year Round", description:"A quiet, scenic trail around a beautiful lake. Perfect for beginners and families.", address:"Great Hollow Rd, New Milford, CT", lat:41.5776, lng:-73.4043 },
+  { name:"Saugatuck Reservoir", location:"Redding, CT", difficulty:"Medium", distance:5.0, time:"2.5-3 hrs", terrain:"Reservoir / Forest", dog:false, kids:true, parking:true, fee:"Free", season:"Spring / Fall", description:"A secluded trail with stunning reservoir views and minimal crowds. One of the most peaceful hikes in the area.", address:"Valley Rd, Redding, CT", lat:41.3548, lng:-73.3876 },
+  { name:"Breakneck Pond Trail", location:"Union, CT", difficulty:"Medium", distance:5.8, time:"3-4 hrs", terrain:"Pond / Forest", dog:true, kids:true, parking:true, fee:"Free", season:"Year Round", description:"A gorgeous loop around Breakneck Pond in Nipmuck State Forest. One of the most scenic trails in northeastern Connecticut.", address:"Bigelow Rd, Union, CT", lat:41.9876, lng:-72.1543 },
+  { name:"Metacomet Trail - Ragged Mountain", location:"Southington, CT", difficulty:"Hard", distance:7.2, time:"4-5 hrs", terrain:"Ridge / Rocky", dog:true, kids:false, parking:true, fee:"Free", season:"Spring / Fall", description:"A rugged stretch of the famous Metacomet Trail along the volcanic Ragged Mountain ridge with sweeping views of central Connecticut.", address:"West Lane, Southington, CT", lat:41.5934, lng:-72.9012 },
+  { name:"Devil's Hopyard State Park", location:"East Haddam, CT", difficulty:"Easy", distance:2.8, time:"1.5-2 hrs", terrain:"Waterfall / Forest", dog:true, kids:true, parking:true, fee:"Free", season:"Year Round", description:"A beloved trail featuring the dramatic Chapman Falls waterfall and unique pothole rock formations along the Eightmile River.", address:"366 Hopyard Rd, East Haddam, CT", lat:41.4732, lng:-72.3401 },
+  { name:"Chatfield Hollow State Park", location:"Killingworth, CT", difficulty:"Easy", distance:3.5, time:"1.5-2.5 hrs", terrain:"Pond / Forest", dog:true, kids:true, parking:true, fee:"Seasonal Fee", season:"Year Round", description:"A family-friendly trail system around a scenic pond with swimming in summer. Well-marked and easy to navigate.", address:"381 Route 80, Killingworth, CT", lat:41.3654, lng:-72.5523 },
+  { name:"Peoples State Forest", location:"Barkhamsted, CT", difficulty:"Medium", distance:6.1, time:"3-4 hrs", terrain:"River / Forest", dog:true, kids:true, parking:true, fee:"Free", season:"Year Round", description:"Miles of well-maintained trails through old-growth forest along the Farmington River. Beautiful in every season.", address:"East River Rd, Barkhamsted, CT", lat:41.9123, lng:-72.9876 },
+  { name:"Talcott Mountain State Park", location:"Simsbury, CT", difficulty:"Medium", distance:4.0, time:"2-3 hrs", terrain:"Ridge / Tower", dog:true, kids:true, parking:true, fee:"Free", season:"Year Round", description:"A popular hike up Talcott Mountain to Heublein Tower with panoramic views of the Farmington Valley. One of the most visited trails in the state.", address:"Route 185, Simsbury, CT", lat:41.8234, lng:-72.8012 },
+  { name:"Bluff Head / Totoket Mountain", location:"North Guilford, CT", difficulty:"Hard", distance:5.4, time:"3-4 hrs", terrain:"Ridge / Rocky", dog:true, kids:false, parking:true, fee:"Free", season:"Spring / Fall", description:"A challenging scramble up to Bluff Head with outstanding views of the Connecticut shoreline and Long Island Sound on clear days.", address:"Totoket Rd, North Guilford, CT", lat:41.4521, lng:-72.6934 },
+  { name:"Macedonia Brook State Park", location:"Kent, CT", difficulty:"Hard", distance:8.0, time:"4-6 hrs", terrain:"Ridge / Brook", dog:true, kids:false, parking:true, fee:"Free", season:"Spring / Fall", description:"A demanding loop through one of the most remote and scenic parks in the state, featuring multiple ridges and a beautiful brook gorge.", address:"159 Macedonia Brook Rd, Kent, CT", lat:41.7543, lng:-73.4812 },
+  { name:"Westwoods Trail System", location:"Guilford, CT", difficulty:"Medium", distance:5.5, time:"2.5-3.5 hrs", terrain:"Forest / Ledge", dog:true, kids:true, parking:true, fee:"Free", season:"Year Round", description:"An extensive network of trails through coastal forest with open ledge views. Over 40 miles of interconnected paths to explore.", address:"Sam Hill Rd, Guilford, CT", lat:41.3123, lng:-72.6543 },
+  { name:"Paugnut State Forest", location:"Torrington, CT", difficulty:"Medium", distance:4.8, time:"2.5-3 hrs", terrain:"Forest / Stream", dog:true, kids:true, parking:true, fee:"Free", season:"Year Round", description:"A quiet forest trail system in northwestern Connecticut with beautiful stream crossings and hardwood forest. Rarely crowded.", address:"Paugnut State Forest Rd, Torrington, CT", lat:41.8712, lng:-73.1234 },
+];
+
+
+let reviews = [];
+let selectedRating = 0;
+const diffColors = { Easy:"#2E6B25", Medium:"#9B6020", Hard:"#7A2020" };
+let mapMarkers = [], leafletMap;
+
+function showPage(page, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  btn.classList.add('active');
+  if (page === 'reviews') renderReviews();
+  if (page === 'trails') renderTrailsList();
+  if (page === 'map') setTimeout(() => leafletMap && leafletMap.invalidateSize(), 100);
+}
+
+function makeIcon(diff) {
+  const c = diffColors[diff] || '#378ADD';
+  const svg = `<svg width="32" height="40" viewBox="0 0 32 40" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24C32 7.163 24.837 0 16 0z" fill="${c}" stroke="white" stroke-width="1.5"/>
+    <circle cx="16" cy="16" r="6.5" fill="white"/>
+    <circle cx="16" cy="16" r="4" fill="${c}" opacity="0.4"/>
+  </svg>`;
+  return L.divIcon({ html:svg, className:'', iconSize:[32,40], iconAnchor:[16,40], popupAnchor:[0,-40] });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  leafletMap = L.map('map').setView([41.45, -73.35], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© <a href="https://openstreetmap.org">OpenStreetMap</a>'
+  }).addTo(leafletMap);
+
+  trails.forEach((t, i) => {
+    const m = L.marker([t.lat, t.lng], { icon: makeIcon(t.difficulty) })
+      .addTo(leafletMap)
+      .bindTooltip(`<strong>${t.name}</strong><br><span style="font-size:11px;color:#666">${t.difficulty} · ${t.distance} mi</span>`, { direction:'top', offset:[0,-6] })
+      .on('click', () => openPanel(i));
+    mapMarkers.push({ marker:m, trail:t });
+  });
+
+  updateTrailCount();
+  document.getElementById('stat-trails').textContent = trails.length;
+
+  const sel = document.getElementById('r-trail');
+  trails.forEach(t => { const o = document.createElement('option'); o.value = t.name; o.textContent = t.name; sel.appendChild(o); });
+
+  renderTrailsList();
+  renderReviews();
+});
+
+function filterMap() {
+  const s = document.getElementById('map-search').value.toLowerCase();
+  const d = document.getElementById('map-diff').value;
+  mapMarkers.forEach(({ marker, trail }) => {
+    const show = trail.name.toLowerCase().includes(s) && (d === 'all' || trail.difficulty === d);
+    show ? marker.addTo(leafletMap) : leafletMap.removeLayer(marker);
+  });
+  updateTrailCount();
+}
+
+function updateTrailCount() {
+  const n = mapMarkers.filter(m => leafletMap.hasLayer(m.marker)).length;
+  document.getElementById('trail-count').textContent = `Showing ${n} trail${n !== 1 ? 's' : ''}`;
+}
+
+function openPanel(i) {
+  const t = trails[i];
+  document.getElementById('p-name').textContent = t.name;
+  document.getElementById('p-loc').textContent = 'Location: ' + t.location;
+  document.getElementById('p-badge').innerHTML = `<span class="diff-badge diff-${t.difficulty}">${t.difficulty}</span>`;
+  document.getElementById('p-dist').textContent = t.distance + ' miles';
+  document.getElementById('p-time').textContent = t.time;
+  document.getElementById('p-terrain').textContent = t.terrain;
+  document.getElementById('p-season').textContent = t.season;
+  document.getElementById('p-desc').textContent = t.description;
+  const tags = [t.dog&&'Dog friendly', t.kids&&'Kid friendly', t.parking&&'Parking', `Fee: ${t.fee}`].filter(Boolean);
+  document.getElementById('p-tags').innerHTML = tags.map(tg=>`<span class="tag">${tg}</span>`).join('');
+  document.getElementById('trail-panel').style.display = 'block';
+}
+
+function closePanel() { document.getElementById('trail-panel').style.display = 'none'; }
+
+function renderTrailsList() {
+  const s = document.getElementById('list-search')?.value.toLowerCase() || '';
+  const d = document.getElementById('list-diff')?.value || 'all';
+  const sort = document.getElementById('list-sort')?.value || 'name';
+  let list = trails.filter(t => t.name.toLowerCase().includes(s) && (d === 'all' || t.difficulty === d));
+  if (sort === 'name') list.sort((a,b) => a.name.localeCompare(b.name));
+  else if (sort === 'dist-asc') list.sort((a,b) => a.distance - b.distance);
+  else list.sort((a,b) => b.distance - a.distance);
+  document.getElementById('trails-grid').innerHTML = list.map(t => {
+    const idx = trails.indexOf(t);
+    const tags = [t.dog&&'Dog friendly', t.kids&&'Kid friendly', t.parking&&'Parking'].filter(Boolean);
+    return `<div class="trail-card" onclick="openModal(${idx})">
+      <div class="card-ribbon ${t.difficulty}"></div>
+      <div class="card-body">
+        <div class="card-header">
+          <div class="card-name">${t.name}</div>
+          <div class="card-diff-dot" style="background:${diffColors[t.difficulty]}"></div>
+        </div>
+        <div class="card-loc">Location: ${t.location}</div>
+        <div class="card-stats">
+          <div class="card-stat"><div class="card-stat-val">${t.difficulty}</div><div class="card-stat-key">Level</div></div>
+          <div class="card-stat"><div class="card-stat-val">${t.distance} mi</div><div class="card-stat-key">Distance</div></div>
+          <div class="card-stat"><div class="card-stat-val">${t.time}</div><div class="card-stat-key">Est. Time</div></div>
+        </div>
+        <div class="card-desc">${t.description}</div>
+        <div class="card-tags">${tags.map(tg=>`<span class="card-tag">${tg}</span>`).join('')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterList() { renderTrailsList(); }
+
+function openModal(i) {
+  const t = trails[i];
+  document.getElementById('m-name').textContent = t.name;
+  document.getElementById('m-loc').textContent = 'Location: ' + t.location;
+  document.getElementById('m-badge').innerHTML = `<span class="diff-badge diff-${t.difficulty}">${t.difficulty}</span>`;
+  document.getElementById('m-dist').textContent = t.distance + ' miles';
+  document.getElementById('m-time').textContent = t.time;
+  document.getElementById('m-terrain').textContent = t.terrain;
+  document.getElementById('m-fee').textContent = t.fee;
+  document.getElementById('m-desc').textContent = t.description;
+  document.getElementById('m-addr').textContent = t.address;
+  const tags = [t.dog&&'Dog friendly', t.kids&&'Kid friendly', t.parking&&'Parking', `Season: ${t.season}`].filter(Boolean);
+  document.getElementById('m-tags').innerHTML = tags.map(tg=>`<span class="tag">${tg}</span>`).join('');
+  document.getElementById('trail-modal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target.id === 'trail-modal') document.getElementById('trail-modal').classList.remove('open');
+}
+
+function renderReviews() {
+  const c = document.getElementById('reviews-container');
+  if (!reviews.length) { c.innerHTML = '<div class="no-reviews">No reviews yet , be the first to share your experience!</div>'; return; }
+  c.innerHTML = [...reviews].reverse().map(r => `
+    <div class="review-card">
+      <div class="review-top"><div class="review-trail">${r.trail}</div><div class="review-author">${r.name}</div></div>
+      <div class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+      <div class="review-text">${r.text}</div>
+    </div>`).join('');
+}
+
+function setRating(val) {
+  selectedRating = val;
+  document.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('selected', parseInt(b.dataset.val) <= val));
+}
+
+function submitReview() {
+  const name = document.getElementById('r-name').value.trim();
+  const trail = document.getElementById('r-trail').value;
+  const text = document.getElementById('r-text').value.trim();
+  if (!name || !text || !selectedRating) { alert('Please fill in your name, write a review, and pick a star rating!'); return; }
+  reviews.push({ name, trail, rating:selectedRating, text });
+  document.getElementById('r-name').value = '';
+  document.getElementById('r-text').value = '';
+  selectedRating = 0;
+  document.querySelectorAll('.star-btn').forEach(b => b.classList.remove('selected'));
+  const msg = document.getElementById('success-msg');
+  msg.style.display = 'block';
+  setTimeout(() => msg.style.display = 'none', 3500);
+  renderReviews();
+}
+</script>
+</body>
+</html>
